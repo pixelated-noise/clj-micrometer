@@ -4,8 +4,9 @@
             [clojure.core.protocols :as p]
             [clojure.datafy :refer [datafy]])
   (:import [java.util.concurrent TimeUnit]
+           [java.util.concurrent.atomic AtomicLong]
            [io.micrometer.core.instrument
-            MeterRegistry Timer Counter]
+            MeterRegistry Timer Counter Tag Gauge]
            [io.micrometer.core.instrument.simple
             SimpleMeterRegistry]
            [io.micrometer.core.instrument.composite
@@ -58,6 +59,9 @@
               [(keyword (.getKey tag))
                (.getValue tag)]))
        (into {})))
+
+(defn- map->tags [tags]
+  (map (fn [[k v]] (Tag/of (name k) (name v))) tags))
 
 (defn meters [registry]
   (seq (.getMeters registry)))
@@ -161,13 +165,31 @@
 ;; gauge
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defn gauge
+  ([registry name]
+   (gauge registry name {}))
+  ([registry name tags]
+   (let [an (AtomicLong. 0)
+         a  (atom 0)]
+     (.gauge registry name (map->tags tags) an)
+     (add-watch a :gauge (fn [_ _ _ n]
+                           (.set an n)))
+     a)))
 
+(extend-protocol p/Datafiable
+  Gauge
+  (datafy [this]
+    (let [unit :millis]
+      {:name  (meter-name this)
+       :tags  (meter-tags this)
+       :type  :gauge
+       :value (.value this)})))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (comment
   (do
-    (def reg (-> dev/sys :composite))
+    ;;(def reg (-> dev/sys :composite))
 
     (def reg (default-registry
               {:tags {:machine "Stathis' dev machine"}}))
@@ -182,7 +204,13 @@
       (Thread/sleep 2000)
       77)
 
-    (def slow-instrumented (wrap-timer* tt slow-fn)))
+    (def slow-instrumented (wrap-timer* tt slow-fn))
+
+    (def gg (gauge reg "my-gauge"))
+    (swap! gg inc)
+    (reset! gg 888)
+
+    )
 
   (slow-instrumented)
 
