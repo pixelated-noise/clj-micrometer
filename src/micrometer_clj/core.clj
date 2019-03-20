@@ -6,7 +6,8 @@
   (:import [java.util.concurrent TimeUnit]
            [java.util.concurrent.atomic AtomicLong]
            [io.micrometer.core.instrument
-            MeterRegistry Timer Counter Tag Gauge]
+            Meter MeterRegistry Timer Counter Tag Tags Gauge
+            Meter$Id Meter$Type]
            [io.micrometer.core.instrument.simple
             SimpleMeterRegistry]
            [io.micrometer.core.instrument.composite
@@ -25,6 +26,12 @@
 ;; registry
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defmulti make-meter (fn [_ x] (:type x)))
+
+(defn add-meters! [registry meters-specs]
+  (doseq [m meters-specs]
+    (make-meter registry m)))
+
 (defn composite-registry []
   (CompositeMeterRegistry.))
 
@@ -40,12 +47,15 @@
 (defn default-registry
   ([]
    (default-registry {:tags nil}))
-  ([{:keys [tags meter-filters]}]
+  ([{:keys [tags meters meter-filters]}]
    (let [reg (doto (composite-registry)
                (.add (simple-registry)))]
 
      (when tags
        (set-common-tags! reg tags))
+
+     (when meters
+       (add-meters! reg meters))
 
      (when meter-filters
        (doseq [f meter-filters]
@@ -71,6 +81,9 @@
 
 (defn meter-tags [meter]
   (-> meter .getId .getTags tags->map))
+
+(defn meter-description [meter]
+  (-> meter .getId .getDescription))
 
 (defn find [registry name]
   (some->> registry meters (filter #(= name (meter-name %))) first))
@@ -103,6 +116,14 @@
      :tags  (meter-tags this)
      :type  :counter
      :count (count this)}))
+
+(defmethod make-meter :counter
+  [registry {:keys [name tags base-unit description]}]
+  (cond-> (Counter/builder name)
+    tags (.tags (map->tags tags))
+    base-unit (.baseUnit base-unit)
+    description (.description description)
+    :then (.register registry)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; timer
@@ -180,10 +201,20 @@
   Gauge
   (datafy [this]
     (let [unit :millis]
-      {:name  (meter-name this)
-       :tags  (meter-tags this)
-       :type  :gauge
-       :value (.value this)})))
+      {:name       (meter-name this)
+       :tags       (meter-tags this)
+       :type       :gauge
+       :value      (.value this)
+       :desciption (meter-description this)})))
+
+(defmethod make-meter :gauge
+  [registry {:keys [name tags base-unit description strong-ref]}]
+  (cond-> (Counter/builder name)
+    tags (.tags (map->tags tags))
+    base-unit (.baseUnit base-unit)
+    description (.description description)
+    strong-ref (.strongReference strong-ref)
+    :then (.register registry)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -191,8 +222,16 @@
   (do
     ;;(def reg (-> dev/sys :composite))
 
-    (def reg (default-registry
-              {:tags {:machine "Stathis' dev machine"}}))
+    (def reg
+      (default-registry
+       {:tags   {:machine "Stathis' dev machine"}
+        :meters [{:type :counter
+                  :name "foo"
+                  :tags {:machine "turbo"}}
+                 {:type :gauge
+                  :name "function"}]}))
+
+
     (def cc (counter reg "foo" {:machine "turbo"}))
 
     (inc! cc)
