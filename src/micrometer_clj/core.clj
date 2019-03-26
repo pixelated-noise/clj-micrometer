@@ -222,6 +222,8 @@
   (do
     ;;(def reg (-> dev/sys :composite))
 
+    (def cc (counter reg "foo" {:machine "turbo"}))
+
     (def reg
       (default-registry
        {:tags   {:machine "Stathis' dev machine"}
@@ -230,9 +232,6 @@
                   :tags {:machine "turbo"}}
                  {:type :gauge
                   :name "function"}]}))
-
-
-    (def cc (counter reg "foo" {:machine "turbo"}))
 
     (inc! cc)
     (count cc)
