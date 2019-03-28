@@ -10,7 +10,18 @@
            [io.micrometer.core.instrument.simple
             SimpleMeterRegistry]
            [io.micrometer.core.instrument.composite
-            CompositeMeterRegistry]))
+            CompositeMeterRegistry]
+           [io.micrometer.core.instrument.binder.jvm
+            ClassLoaderMetrics
+            DiskSpaceMetrics
+            ExecutorServiceMetrics
+            JvmGcMetrics
+            JvmMemoryMetrics
+            JvmThreadMetrics]
+           [io.micrometer.core.instrument.binder.system
+            FileDescriptorMetrics
+            ProcessorMetrics
+            UptimeMetrics]))
 
 (def time-units
   {:nanos   TimeUnit/NANOSECONDS
@@ -23,6 +34,44 @@
 
 (defprotocol Datable
   (->data [this]))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; JVM and other built-in metrics
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn bind-jvm-metrics
+  "Bind groups of JVM metrics to registry. selected can be :all or set containing any of
+  :class-loader :memory :gc :thread"
+
+  [registry selected]
+  (let [selected (if (= :all selected)
+                   (constantly true)
+                   selected)
+        metrics (remove
+                 nil?
+                 [(when (selected :class-loader) (ClassLoaderMetrics.))
+                  (when (selected :memory) (JvmMemoryMetrics.))
+                  (when (selected :gc) (JvmGcMetrics.))
+                  (when (selected :thread) (JvmThreadMetrics.))])]
+    (doseq [m metrics]
+      (.bindTo m registry))
+    registry))
+
+(defn bind-system-metrics
+  "Bind groups of system metrics to registry. selected can be :all or set containing any of
+  :file-descriptor :cpu :uptime"
+  [registry selected]
+  (let [selected (if (= :all selected)
+                   (constantly true)
+                   selected)
+        metrics (remove
+                 nil?
+                 [(when (selected :file-descriptor) (FileDescriptorMetrics.))
+                  (when (selected :cpu) (ProcessorMetrics.))
+                  (when (selected :uptime) (UptimeMetrics.))])]
+    (doseq [m metrics]
+      (.bindTo m registry))
+    registry))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; registry
@@ -47,9 +96,13 @@
   (-> registry .config (.commonTags (flatten-tags tags))))
 
 (defn default-registry
+  "Make default registry. This is a composite-registry that contains a
+  simple-registry. You can optionally pass a map of :tags, :meters (built
+  according to `make-meter`), :meter-filters, :jvm-metrics (see `bind-jvm-metrics`) and
+  :system-metrics (see `bind-system-metrics`)."
   ([]
    (default-registry {:tags nil}))
-  ([{:keys [tags meters meter-filters]}]
+  ([{:keys [tags meters meter-filters jvm-metrics system-metrics]}]
    (let [reg (doto (composite-registry)
                (.add (simple-registry)))]
 
@@ -62,6 +115,13 @@
      (when meter-filters
        (doseq [f meter-filters]
          (-> reg .config (.meterFilter f))))
+
+     (when jvm-metrics
+       (bind-jvm-metrics reg jvm-metrics))
+
+     (when system-metrics
+       (bind-system-metrics reg system-metrics))
+
      reg)))
 
 (defn- tags->map [tags]
