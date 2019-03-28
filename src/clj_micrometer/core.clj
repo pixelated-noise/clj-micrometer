@@ -1,8 +1,7 @@
-(ns micrometer-clj.core
+(ns clj-micrometer.core
   (:refer-clojure :exclude [find count])
   (:require [clojure.string :as str]
-            [clojure.core.protocols :as p]
-            [clojure.datafy :refer [datafy]])
+            [clojure.core.protocols :as p])
   (:import [java.util.concurrent TimeUnit]
            [java.util.concurrent.atomic AtomicLong]
            [io.micrometer.core.instrument
@@ -21,6 +20,9 @@
    :minutes TimeUnit/MINUTES
    :hours   TimeUnit/HOURS
    :days    TimeUnit/DAYS})
+
+(defprotocol Datable
+  (->data [this]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; registry
@@ -88,10 +90,10 @@
 (defn find [registry name]
   (some->> registry meters (filter #(= name (meter-name %))) first))
 
-(extend-protocol p/Datafiable
+(extend-protocol Datable
   MeterRegistry
-  (datafy [this]
-    {:meters (map datafy (meters this))}))
+  (->data [this]
+    {:meters (map ->data (meters this))}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; counter
@@ -109,9 +111,9 @@
 (defn count [counter]
   (.count counter))
 
-(extend-protocol p/Datafiable
+(extend-protocol Datable
   Counter
-  (p/datafy [this]
+  (->data [this]
     {:name  (meter-name this)
      :tags  (meter-tags this)
      :type  :counter
@@ -170,9 +172,9 @@
 (defn record! [timer amount unit]
   (.record timer amount (time-units unit)))
 
-(extend-protocol p/Datafiable
+(extend-protocol Datable
   Timer
-  (datafy [this]
+  (->datable [this]
     (let [unit :millis]
       {:name       (meter-name this)
        :tags       (meter-tags this)
@@ -197,9 +199,9 @@
                            (.set an n)))
      a)))
 
-(extend-protocol p/Datafiable
+(extend-protocol Datable
   Gauge
-  (datafy [this]
+  (->data [this]
     (let [unit :millis]
       {:name       (meter-name this)
        :tags       (meter-tags this)
