@@ -47,9 +47,11 @@
 
 (defn reset!
   ([name x]
-   (reset! name nil x))
+   (when x
+     (reset! name nil x)))
   ([name tags x]
-   (.set (gauge name tags) x)))
+   (when x
+     (.set (gauge name tags) x))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; timer
@@ -83,7 +85,7 @@
 
 (defn init!
   ([]
-   (init nil))
+   (init! nil))
   ([opts]
    (add-registry! (core/simple-registry))
    (core/config-registry! Metrics/globalRegistry opts)))
