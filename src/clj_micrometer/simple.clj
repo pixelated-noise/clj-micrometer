@@ -90,3 +90,5 @@
 
 (defn registry->data []
   (core/->data Metrics/globalRegistry))
+
+(def global-registry Metrics/globalRegistry)
