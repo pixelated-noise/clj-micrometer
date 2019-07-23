@@ -95,6 +95,25 @@
 (defn set-common-tags! [registry tags]
   (-> registry .config (.commonTags (flatten-tags tags))))
 
+(defn config-registry! [reg {:keys [tags meters meter-filters jvm-metrics system-metrics]}]
+  (when tags
+    (set-common-tags! reg tags))
+
+  (when meters
+    (add-meters! reg meters))
+
+  (when meter-filters
+    (doseq [f meter-filters]
+      (-> reg .config (.meterFilter f))))
+
+  (when jvm-metrics
+    (bind-jvm-metrics reg jvm-metrics))
+
+  (when system-metrics
+    (bind-system-metrics reg system-metrics))
+
+  reg)
+
 (defn default-registry
   "Make default registry. This is a composite-registry that contains a
   simple-registry. You can optionally pass a map of :tags, :meters (built
@@ -102,26 +121,10 @@
   :system-metrics (see `bind-system-metrics`)."
   ([]
    (default-registry {:tags nil}))
-  ([{:keys [tags meters meter-filters jvm-metrics system-metrics]}]
+  ([opts]
    (let [reg (doto (composite-registry)
                (.add (simple-registry)))]
-
-     (when tags
-       (set-common-tags! reg tags))
-
-     (when meters
-       (add-meters! reg meters))
-
-     (when meter-filters
-       (doseq [f meter-filters]
-         (-> reg .config (.meterFilter f))))
-
-     (when jvm-metrics
-       (bind-jvm-metrics reg jvm-metrics))
-
-     (when system-metrics
-       (bind-system-metrics reg system-metrics))
-
+     (config-registry! reg opts)
      reg)))
 
 (defn- tags->map [tags]
@@ -132,7 +135,7 @@
                (.getValue tag)]))
        (into {})))
 
-(defn- map->tags [tags]
+(defn map->tags [tags]
   (map (fn [[k v]] (Tag/of (name k) (name v))) tags))
 
 (defn meters [registry]
@@ -234,7 +237,7 @@
 
 (extend-protocol Datable
   Timer
-  (->datable [this]
+  (->data [this]
     (let [unit :millis]
       {:name       (meter-name this)
        :tags       (meter-tags this)
