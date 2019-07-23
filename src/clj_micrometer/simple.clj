@@ -6,6 +6,7 @@
 
 ;; reference:
 ;; https://github.com/micrometer-metrics/micrometer/blob/master/micrometer-core/src/main/java/io/micrometer/core/instrument/Metrics.java
+;; https://github.com/micrometer-metrics/micrometer/blob/master/micrometer-core/src/main/java/io/micrometer/core/instrument/MeterRegistry.java
 
 (defn- metric-name [x]
   (cond (string? x)            x
