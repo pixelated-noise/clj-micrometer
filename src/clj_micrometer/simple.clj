@@ -69,7 +69,8 @@
   ([sample name]
    (stop-sample! sample name nil))
   ([sample name tags]
-   (.stop sample (timer name tags))))
+   (when (and sample name)
+     (.stop sample (timer name tags)))))
 
 (defmacro time [timer & body]
   `(let [sample# (start-sample!)
